@@ -1,0 +1,113 @@
+---
+title: "Memory management"
+description: "Understand libpg_query's memory model, free every result struct, and handle thread lifecycle correctly."
+---
+
+Every libpg_query function that parses or processes a query returns a result struct containing heap-allocated data. You are responsible for freeing that data when you are done with it. libpg_query provides a dedicated free function for each result type.
+
+<Warning>
+Not calling the appropriate free function after each result causes a memory leak. In long-running processes, these leaks accumulate.
+</Warning>
+
+## Free functions
+
+Each function below frees the data inside the corresponding result struct. Always call the free function that matches the result type you received:
+
+| Result type | Free function |
+|---|---|
+| `PgQueryParseResult` | `pg_query_free_parse_result()` |
+| `PgQueryScanResult` | `pg_query_free_scan_result()` |
+| `PgQueryNormalizeResult` | `pg_query_free_normalize_result()` |
+| `PgQueryFingerprintResult` | `pg_query_free_fingerprint_result()` |
+| `PgQuerySplitResult` | `pg_query_free_split_result()` |
+| `PgQueryDeparseResult` | `pg_query_free_deparse_result()` |
+| `PgQueryDeparseCommentsResult` | `pg_query_free_deparse_comments_result()` |
+| `PgQueryProtobufParseResult` | `pg_query_free_protobuf_parse_result()` |
+| `PgQueryPlpgsqlParseResult` | `pg_query_free_plpgsql_parse_result()` |
+| `PgQueryIsUtilityResult` | `pg_query_free_is_utility_result()` |
+| `PgQuerySummaryParseResult` | `pg_query_free_summary_parse_result()` |
+
+## Always free on both success and error
+
+A result struct may contain an `error` field. Even when parsing fails and `result.error` is non-NULL, the struct itself may contain partially allocated data. Always call the free function regardless of whether an error occurred:
+
+```c
+#include <pg_query.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+  PgQueryParseResult result = pg_query_parse("SELECT 1");
+
+  if (result.error) {
+    printf("error: %s at %d\n",
+           result.error->message,
+           result.error->cursorpos);
+  } else {
+    printf("%s\n", result.parse_tree);
+  }
+
+  /* Free unconditionally — not just on the success path */
+  pg_query_free_parse_result(result);
+
+  return 0;
+}
+```
+
+## pg_query_exit
+
+`pg_query_exit` cleans up the top-level memory context that libpg_query maintains internally:
+
+```c
+void pg_query_exit(void);
+```
+
+Call it at the end of `main` or at thread exit to release all remaining internal memory. This is especially useful when running under Valgrind, where lingering allocations show up as leaks.
+
+```c
+int main() {
+  PgQueryParseResult result = pg_query_parse("SELECT 1");
+  printf("%s\n", result.parse_tree);
+  pg_query_free_parse_result(result);
+
+  /* Optional, but recommended for clean Valgrind output */
+  pg_query_exit();
+  return 0;
+}
+```
+
+<Note>
+`pg_query_exit` is optional for the main thread when the process is about to exit, because the OS reclaims all memory anyway. It is most useful for Valgrind runs and for library use where you want to release memory while the process continues running.
+</Note>
+
+## Thread safety
+
+libpg_query is thread-safe. Each thread has its own internal memory context, so multiple threads can call libpg_query functions concurrently without synchronization.
+
+When a thread exits, call `pg_query_exit` on that thread to release its memory context:
+
+```c
+#include <pg_query.h>
+#include <pthread.h>
+
+void *worker(void *arg) {
+  PgQueryParseResult result = pg_query_parse("SELECT 1");
+  /* ... use result ... */
+  pg_query_free_parse_result(result);
+
+  /* Release this thread's memory context before exiting */
+  pg_query_exit();
+  return NULL;
+}
+```
+
+If you do not call `pg_query_exit` on a thread, the thread's memory context is still cleaned up automatically when the thread exits. However, calling it explicitly is the safest practice.
+
+## Deprecated: pg_query_init
+
+`pg_query_init` was deprecated in version 9.5-1.4.1. Initialization is now performed automatically the first time any libpg_query function is called. You do not need to call `pg_query_init` in new code.
+
+```c
+/* Deprecated — do not call in new code */
+void pg_query_init(void);
+```

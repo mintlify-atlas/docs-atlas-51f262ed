@@ -1,0 +1,110 @@
+---
+title: 'Normalizing queries'
+description: 'Use pg_query_normalize() to replace literal values in a SQL query with numbered parameter placeholders.'
+---
+
+`pg_query_normalize()` rewrites a SQL query by replacing every literal constant with a positional parameter placeholder (`$1`, `$2`, …). This produces a canonical form that you can use to group queries that have the same structure but different values — for example, when collecting query analytics or building a query index.
+
+**Before:** `SELECT * FROM orders WHERE customer_id = 42 AND status = 'active'`
+
+**After:** `SELECT * FROM orders WHERE customer_id = $1 AND status = $2`
+
+If the query already contains positional parameters, normalization starts numbering new placeholders after the highest existing one, so existing `$N` references are preserved.
+
+## Function signatures
+
+```c
+PgQueryNormalizeResult pg_query_normalize(const char* input);
+PgQueryNormalizeResult pg_query_normalize_utility(const char* input);
+```
+
+`pg_query_normalize()` handles standard DML statements (`SELECT`, `INSERT`, `UPDATE`, `DELETE`). `pg_query_normalize_utility()` handles utility statements such as DDL (`CREATE TABLE`, `ALTER TABLE`, etc.) and other commands that are not DML.
+
+### Result struct
+
+```c
+typedef struct {
+  char* normalized_query; // The rewritten query string, or NULL on error
+  PgQueryError* error;    // NULL on success, populated on error
+} PgQueryNormalizeResult;
+```
+
+## Basic example
+
+```c
+#include <pg_query.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+  PgQueryNormalizeResult result;
+
+  result = pg_query_normalize("SELECT 1");
+
+  if (result.error) {
+    printf("error: %s at %d\n", result.error->message, result.error->cursorpos);
+  } else {
+    printf("%s\n", result.normalized_query);
+  }
+
+  pg_query_free_normalize_result(result);
+
+  // Optional: frees the top-level memory context
+  pg_query_exit();
+
+  return 0;
+}
+```
+
+## Error handling
+
+`pg_query_normalize()` runs the PostgreSQL scanner on the input to locate literals. If the input is not valid SQL text (for example, an unterminated dollar-quoted string), the call returns an error.
+
+```c
+#include <pg_query.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+  PgQueryNormalizeResult result;
+
+  result = pg_query_normalize("SELECT $$$");
+
+  if (result.error) {
+    printf("error: %s at location %d (%s:%d)\n",
+           result.error->message,
+           result.error->cursorpos,
+           result.error->filename,
+           result.error->lineno);
+  } else {
+    printf("%s\n", result.normalized_query);
+  }
+
+  pg_query_free_normalize_result(result);
+  pg_query_exit();
+
+  return 0;
+}
+```
+
+## Utility statements
+
+Use `pg_query_normalize_utility()` for DDL and other non-DML commands. It applies the same literal-replacement logic but is designed for statements that the standard DML normalizer does not handle:
+
+```c
+PgQueryNormalizeResult result;
+
+result = pg_query_normalize_utility(
+    "CREATE USER alice PASSWORD 'secret123'");
+
+if (!result.error) {
+    printf("%s\n", result.normalized_query);
+    // Output: CREATE USER alice PASSWORD $1
+}
+
+pg_query_free_normalize_result(result);
+```
+
+<Note>
+Always call `pg_query_free_normalize_result(result)` after you are done with the result. This releases the memory allocated for `normalized_query` and `error`.
+</Note>

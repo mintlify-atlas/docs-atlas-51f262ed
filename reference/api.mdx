@@ -1,0 +1,402 @@
+---
+title: "API reference"
+description: "Complete reference for every public function in pg_query.h."
+---
+
+This page documents every public function exposed by `pg_query.h`. Include the header in your C program and link against `libpg_query`:
+
+```bash
+cc -Ilibpg_query -Llibpg_query example.c -lpg_query
+```
+
+---
+
+## Parsing
+
+### `pg_query_parse`
+
+Parse a SQL query string and return the parse tree as a JSON string.
+
+```c
+PgQueryParseResult pg_query_parse(const char* input);
+```
+
+<ParamField path="input" type="const char*" required>
+  SQL query string to parse.
+</ParamField>
+
+**Returns:** [`PgQueryParseResult`](/reference/result-types#pgqueryparseresult) — the JSON parse tree is in `result.parse_tree`.
+
+**Free with:** `pg_query_free_parse_result(result)`
+
+---
+
+### `pg_query_parse_opts`
+
+Parse a SQL query string with explicit parser options (parse mode and GUC flags).
+
+```c
+PgQueryParseResult pg_query_parse_opts(const char* input, int parser_options);
+```
+
+<ParamField path="input" type="const char*" required>
+  SQL query string to parse.
+</ParamField>
+
+<ParamField path="parser_options" type="int" required>
+  Bitmask of parser options. Combine a [`PgQueryParseMode`](/reference/result-types#pgqueryparsemode) value with zero or more GUC flag constants using bitwise OR. See [parser option constants](/reference/result-types#parser-option-constants).
+</ParamField>
+
+**Returns:** [`PgQueryParseResult`](/reference/result-types#pgqueryparseresult)
+
+**Free with:** `pg_query_free_parse_result(result)`
+
+---
+
+### `pg_query_parse_protobuf`
+
+Parse a SQL query string and return the parse tree serialized as a Protobuf message.
+
+```c
+PgQueryProtobufParseResult pg_query_parse_protobuf(const char* input);
+```
+
+<ParamField path="input" type="const char*" required>
+  SQL query string to parse.
+</ParamField>
+
+**Returns:** [`PgQueryProtobufParseResult`](/reference/result-types#pgqueryprotobufparseresult) — the serialized parse tree is in `result.parse_tree`.
+
+**Free with:** `pg_query_free_protobuf_parse_result(result)`
+
+---
+
+### `pg_query_parse_protobuf_opts`
+
+Parse a SQL query string with explicit parser options and return a Protobuf parse tree.
+
+```c
+PgQueryProtobufParseResult pg_query_parse_protobuf_opts(const char* input, int parser_options);
+```
+
+<ParamField path="input" type="const char*" required>
+  SQL query string to parse.
+</ParamField>
+
+<ParamField path="parser_options" type="int" required>
+  Bitmask of parser options. See [parser option constants](/reference/result-types#parser-option-constants).
+</ParamField>
+
+**Returns:** [`PgQueryProtobufParseResult`](/reference/result-types#pgqueryprotobufparseresult)
+
+**Free with:** `pg_query_free_protobuf_parse_result(result)`
+
+---
+
+### `pg_query_parse_plpgsql`
+
+Parse a PL/pgSQL function body and return the parse tree as a JSON string.
+
+```c
+PgQueryPlpgsqlParseResult pg_query_parse_plpgsql(const char* input);
+```
+
+<ParamField path="input" type="const char*" required>
+  Full `CREATE OR REPLACE FUNCTION … $$ … $$ LANGUAGE plpgsql` statement.
+</ParamField>
+
+**Returns:** [`PgQueryPlpgsqlParseResult`](/reference/result-types#pgqueryplpgsqlparseresult) — the JSON function parse tree is in `result.plpgsql_funcs`.
+
+**Free with:** `pg_query_free_plpgsql_parse_result(result)`
+
+---
+
+## Scanning
+
+### `pg_query_scan`
+
+Tokenize a SQL string using the PostgreSQL scanner/lexer and return the tokens as a serialized Protobuf `ScanResult` message.
+
+```c
+PgQueryScanResult pg_query_scan(const char* input);
+```
+
+<ParamField path="input" type="const char*" required>
+  SQL string to scan.
+</ParamField>
+
+**Returns:** [`PgQueryScanResult`](/reference/result-types#pgqueryscanresult) — the serialized token list is in `result.pbuf`. Unpack with `pg_query__scan_result__unpack` from `protobuf/pg_query.pb-c.h`.
+
+**Free with:** `pg_query_free_scan_result(result)`
+
+<Note>
+  Scanning does not require a syntactically valid query. Use it when you need raw token information, for example for syntax highlighting.
+</Note>
+
+---
+
+## Normalization
+
+### `pg_query_normalize`
+
+Replace literal constant values in a SQL query with `$n` parameter placeholders (similar to `pg_stat_statements`).
+
+```c
+PgQueryNormalizeResult pg_query_normalize(const char* input);
+```
+
+<ParamField path="input" type="const char*" required>
+  SQL query string to normalize.
+</ParamField>
+
+**Returns:** [`PgQueryNormalizeResult`](/reference/result-types#pgquerynormalizeresult) — the normalized query string is in `result.normalized_query`.
+
+**Free with:** `pg_query_free_normalize_result(result)`
+
+---
+
+### `pg_query_normalize_utility`
+
+Normalize a utility (DDL/non-SELECT) statement, replacing constant values with `$n` placeholders.
+
+```c
+PgQueryNormalizeResult pg_query_normalize_utility(const char* input);
+```
+
+<ParamField path="input" type="const char*" required>
+  Utility SQL statement to normalize.
+</ParamField>
+
+**Returns:** [`PgQueryNormalizeResult`](/reference/result-types#pgquerynormalizeresult)
+
+**Free with:** `pg_query_free_normalize_result(result)`
+
+---
+
+## Fingerprinting
+
+### `pg_query_fingerprint`
+
+Compute a 64-bit fingerprint for a SQL query. Queries that differ only in literal values or whitespace produce the same fingerprint.
+
+```c
+PgQueryFingerprintResult pg_query_fingerprint(const char* input);
+```
+
+<ParamField path="input" type="const char*" required>
+  SQL query string to fingerprint.
+</ParamField>
+
+**Returns:** [`PgQueryFingerprintResult`](/reference/result-types#pgqueryfingerprintresult) — the numeric fingerprint is in `result.fingerprint` and the hex string representation is in `result.fingerprint_str`.
+
+**Free with:** `pg_query_free_fingerprint_result(result)`
+
+---
+
+### `pg_query_fingerprint_opts`
+
+Compute a fingerprint with explicit parser options.
+
+```c
+PgQueryFingerprintResult pg_query_fingerprint_opts(const char* input, int parser_options);
+```
+
+<ParamField path="input" type="const char*" required>
+  SQL query string to fingerprint.
+</ParamField>
+
+<ParamField path="parser_options" type="int" required>
+  Bitmask of parser options. See [parser option constants](/reference/result-types#parser-option-constants).
+</ParamField>
+
+**Returns:** [`PgQueryFingerprintResult`](/reference/result-types#pgqueryfingerprintresult)
+
+**Free with:** `pg_query_free_fingerprint_result(result)`
+
+---
+
+## Statement splitting
+
+### `pg_query_split_with_scanner`
+
+Split a multi-statement SQL string into individual statement spans using the scanner only (no full parse).
+
+```c
+PgQuerySplitResult pg_query_split_with_scanner(const char *input);
+```
+
+<ParamField path="input" type="const char*" required>
+  SQL string that may contain multiple statements separated by semicolons.
+</ParamField>
+
+**Returns:** [`PgQuerySplitResult`](/reference/result-types#pgquerysplitresult) — an array of [`PgQuerySplitStmt`](/reference/result-types#pgquerysplitstmt) spans.
+
+**Free with:** `pg_query_free_split_result(result)`
+
+<Tip>
+  Use `pg_query_split_with_scanner` when the input may contain parse errors — the scanner tolerates syntax that the full parser would reject. Use `pg_query_split_with_parser` otherwise for better accuracy.
+</Tip>
+
+---
+
+### `pg_query_split_with_parser`
+
+Split a multi-statement SQL string into individual statement spans using the full parser for improved accuracy.
+
+```c
+PgQuerySplitResult pg_query_split_with_parser(const char *input);
+```
+
+<ParamField path="input" type="const char*" required>
+  Syntactically valid SQL string that may contain multiple statements.
+</ParamField>
+
+**Returns:** [`PgQuerySplitResult`](/reference/result-types#pgquerysplitresult)
+
+**Free with:** `pg_query_free_split_result(result)`
+
+<Note>
+  Both split functions correctly handle edge cases such as semicolons inside string literals, comments, and constructs like `CREATE RULE … (SELECT 1; SELECT 2);` which count as a single statement.
+</Note>
+
+---
+
+## Deparsing
+
+### `pg_query_deparse_protobuf`
+
+Convert a serialized Protobuf parse tree back into a SQL string.
+
+```c
+PgQueryDeparseResult pg_query_deparse_protobuf(PgQueryProtobuf parse_tree);
+```
+
+<ParamField path="parse_tree" type="PgQueryProtobuf" required>
+  Serialized Protobuf parse tree, as returned by `pg_query_parse_protobuf`.
+</ParamField>
+
+**Returns:** [`PgQueryDeparseResult`](/reference/result-types#pgquerydeparseresult) — the reconstructed SQL string is in `result.query`.
+
+**Free with:** `pg_query_free_deparse_result(result)`
+
+---
+
+### `pg_query_deparse_protobuf_opts`
+
+Convert a serialized Protobuf parse tree back into a SQL string with formatting options (such as pretty-printing and comment re-insertion).
+
+```c
+PgQueryDeparseResult pg_query_deparse_protobuf_opts(PgQueryProtobuf parse_tree, struct PostgresDeparseOpts opts);
+```
+
+<ParamField path="parse_tree" type="PgQueryProtobuf" required>
+  Serialized Protobuf parse tree.
+</ParamField>
+
+<ParamField path="opts" type="struct PostgresDeparseOpts" required>
+  Deparse options. See [`PostgresDeparseOpts`](/reference/result-types#postgresdeparseopts) for all fields including pretty-print settings and comment re-insertion.
+</ParamField>
+
+**Returns:** [`PgQueryDeparseResult`](/reference/result-types#pgquerydeparseresult)
+
+**Free with:** `pg_query_free_deparse_result(result)`
+
+---
+
+### `pg_query_deparse_comments_for_query`
+
+Extract comment metadata from a SQL string for later re-insertion during deparsing.
+
+```c
+PgQueryDeparseCommentsResult pg_query_deparse_comments_for_query(const char *query);
+```
+
+<ParamField path="query" type="const char*" required>
+  SQL query string from which to extract comment locations and text.
+</ParamField>
+
+**Returns:** [`PgQueryDeparseCommentsResult`](/reference/result-types#pgquerydeparsecommentsresult) — an array of [`PostgresDeparseComment`](/reference/result-types#postgresdeparsecomment) structs. Pass these to `pg_query_deparse_protobuf_opts` via `PostgresDeparseOpts.comments`.
+
+**Free with:** `pg_query_free_deparse_comments_result(result)`
+
+---
+
+## Utility checks
+
+### `pg_query_is_utility_stmt`
+
+Check whether each statement in a query string is a utility (non-DML) statement without building a full parse tree.
+
+```c
+PgQueryIsUtilityResult pg_query_is_utility_stmt(const char *query);
+```
+
+<ParamField path="query" type="const char*" required>
+  SQL query string to inspect.
+</ParamField>
+
+**Returns:** [`PgQueryIsUtilityResult`](/reference/result-types#pgqueryisutilityresult) — `result.items` is a `bool` array of length `result.length`, one entry per statement.
+
+**Free with:** `pg_query_free_is_utility_result(result)`
+
+<Tip>
+  This is a fast check for callers that need to distinguish DML from DDL/utility statements without needing the full parse tree.
+</Tip>
+
+---
+
+### `pg_query_summary`
+
+Parse a query and return a compact Protobuf summary containing high-level information (such as referenced tables) without a full serialization step. Also supports smart truncation of deeply nested query parts.
+
+```c
+PgQuerySummaryParseResult pg_query_summary(const char* input, int parser_options, int truncate_limit);
+```
+
+<ParamField path="input" type="const char*" required>
+  SQL query string to summarize.
+</ParamField>
+
+<ParamField path="parser_options" type="int" required>
+  Bitmask of parser options. See [parser option constants](/reference/result-types#parser-option-constants). Pass `0` for defaults.
+</ParamField>
+
+<ParamField path="truncate_limit" type="int" required>
+  Depth limit for smart truncation. Pass `0` to disable truncation.
+</ParamField>
+
+**Returns:** [`PgQuerySummaryParseResult`](/reference/result-types#pgquerysummaryparseresult) — the serialized summary is in `result.summary`.
+
+**Free with:** `pg_query_free_summary_parse_result(result)`
+
+---
+
+## Memory management
+
+After using any result, free it with the corresponding free function to avoid memory leaks.
+
+| Result type                    | Free function                              |
+| ------------------------------ | ------------------------------------------ |
+| `PgQueryParseResult`           | `pg_query_free_parse_result(result)`       |
+| `PgQueryProtobufParseResult`   | `pg_query_free_protobuf_parse_result(result)` |
+| `PgQueryPlpgsqlParseResult`    | `pg_query_free_plpgsql_parse_result(result)` |
+| `PgQueryScanResult`            | `pg_query_free_scan_result(result)`        |
+| `PgQueryNormalizeResult`       | `pg_query_free_normalize_result(result)`   |
+| `PgQueryFingerprintResult`     | `pg_query_free_fingerprint_result(result)` |
+| `PgQuerySplitResult`           | `pg_query_free_split_result(result)`       |
+| `PgQueryDeparseResult`         | `pg_query_free_deparse_result(result)`     |
+| `PgQueryDeparseCommentsResult` | `pg_query_free_deparse_comments_result(result)` |
+| `PgQueryIsUtilityResult`       | `pg_query_free_is_utility_result(result)`  |
+| `PgQuerySummaryParseResult`    | `pg_query_free_summary_parse_result(result)` |
+
+### `pg_query_exit`
+
+Clean up the top-level Postgres memory context for the current thread. This is called automatically when a thread exits, so you only need this for explicit early cleanup or memory-testing purposes.
+
+```c
+void pg_query_exit(void);
+```
+
+<Warning>
+  `pg_query_init()` is deprecated as of version 9.5-1.4.1. Initialization now happens automatically on first use; do not call it in new code.
+</Warning>

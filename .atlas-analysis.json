@@ -1,0 +1,100 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "libpg_query",
+  "projectDescription": "A C library that exposes the PostgreSQL parser outside of the server, enabling SQL parsing, scanning, normalization, fingerprinting, and deparsing in any application.",
+  "theme": "luma",
+  "primaryColor": "#e0c155",
+  "lightColor": "#4a6a83",
+  "darkColor": "#d5d6d3",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "guides/parsing",
+              "guides/scanning",
+              "guides/normalization",
+              "guides/fingerprinting",
+              "guides/deparsing",
+              "guides/plpgsql"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "guides/split-statements",
+              "guides/parse-options",
+              "guides/protobuf",
+              "guides/summary",
+              "guides/memory-management"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/api",
+              "reference/result-types",
+              "reference/versions",
+              "reference/language-wrappers"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "SQL query parsing using the actual PostgreSQL parser",
+    "Token scanning/lexing for syntax highlighting",
+    "Query normalization (replace literals with $1, $2, ...)",
+    "Query fingerprinting for identifying structurally similar queries",
+    "Deparsing (convert parse tree back to SQL text with pretty printing)",
+    "PL/pgSQL function parsing",
+    "Statement splitting for multi-statement inputs",
+    "Protobuf serialization of parse trees",
+    "Fast utility statement detection without full parse",
+    "Query summary extraction without full Protobuf serialization"
+  ],
+  "publicApiSurface": [
+    "pg_query_parse()",
+    "pg_query_parse_opts()",
+    "pg_query_parse_protobuf()",
+    "pg_query_parse_protobuf_opts()",
+    "pg_query_parse_plpgsql()",
+    "pg_query_scan()",
+    "pg_query_normalize()",
+    "pg_query_normalize_utility()",
+    "pg_query_fingerprint()",
+    "pg_query_fingerprint_opts()",
+    "pg_query_split_with_scanner()",
+    "pg_query_split_with_parser()",
+    "pg_query_deparse_protobuf()",
+    "pg_query_deparse_protobuf_opts()",
+    "pg_query_deparse_comments_for_query()",
+    "pg_query_is_utility_stmt()",
+    "pg_query_summary()",
+    "pg_query_exit()",
+    "PgQueryParseResult",
+    "PgQueryScanResult",
+    "PgQueryNormalizeResult",
+    "PgQueryFingerprintResult",
+    "PgQueryDeparseResult",
+    "PgQueryPlpgsqlParseResult",
+    "PgQuerySplitResult",
+    "PgQueryProtobufParseResult",
+    "PgQuerySummaryParseResult",
+    "PgQueryIsUtilityResult",
+    "PgQueryError",
+    "PostgresDeparseOpts"
+  ]
+}

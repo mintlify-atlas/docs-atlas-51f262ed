@@ -1,97 +1,70 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "libpg_query"
+description: "The PostgreSQL parser as a C library — use the real Postgres parser outside of the server to parse, scan, normalize, fingerprint, and deparse SQL queries."
 ---
 
-## Setting up
+libpg_query gives you direct access to the PostgreSQL query parser from any application. It uses the actual PostgreSQL server source to produce parse trees, token streams, and normalized query forms — without running a database.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Build the library from source on Linux, macOS, or Windows.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Parse your first SQL query in under five minutes.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="API Reference" icon="code" href="/reference/api">
+    Full reference for every function, struct, and option in the public API.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Language Wrappers" icon="globe" href="/reference/language-wrappers">
+    Use libpg_query from Ruby, Go, Python, Rust, Node, and more.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What you can do
 
-Everything you need to create world-class documentation.
+<CardGroup cols={2}>
+  <Card title="Parse SQL" icon="sitemap" href="/guides/parsing">
+    Turn SQL text into a structured parse tree matching PostgreSQL's internal representation.
+  </Card>
+  <Card title="Scan tokens" icon="magnifying-glass" href="/guides/scanning">
+    Lex a query into keyword and token types — ideal for syntax highlighting.
+  </Card>
+  <Card title="Normalize queries" icon="filter" href="/guides/normalization">
+    Replace literal values with `$1`, `$2`, … to group similar queries.
+  </Card>
+  <Card title="Fingerprint queries" icon="fingerprint" href="/guides/fingerprinting">
+    Generate a stable hash that identifies structurally equivalent queries.
+  </Card>
+  <Card title="Deparse SQL" icon="arrow-right-arrow-left" href="/guides/deparsing">
+    Reconstruct canonical SQL text from a parse tree, with optional pretty-printing.
+  </Card>
+  <Card title="Parse PL/pgSQL" icon="database" href="/guides/plpgsql">
+    Parse PL/pgSQL function bodies into structured JSON.
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Quick example
 
-## Need inspiration?
+```c simple.c
+#include <pg_query.h>
+#include <stdio.h>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+int main() {
+  PgQueryParseResult result = pg_query_parse("SELECT 1");
+
+  printf("%s\n", result.parse_tree);
+
+  pg_query_free_parse_result(result);
+  return 0;
+}
+```
+
+Compile and link against the library:
+
+```bash
+cc -Ilibpg_query -Llibpg_query example.c -lpg_query
+```
+
+<Note>
+  libpg_query is primarily a base library. If you are working in Ruby, Go, Python, Rust, or Node.js, consider using one of the [higher-level wrappers](/reference/language-wrappers) that wrap this library.
+</Note>

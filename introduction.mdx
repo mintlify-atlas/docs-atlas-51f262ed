@@ -1,0 +1,80 @@
+---
+title: "Introduction"
+description: "libpg_query is a C library that gives you access to the PostgreSQL parser outside of the server."
+---
+
+libpg_query uses the actual PostgreSQL server source to parse SQL queries and return the internal PostgreSQL parse tree. It is not a reimplementation — it compiles and links against real PostgreSQL code, so its output is identical to what the server itself produces.
+
+<Note>
+  libpg_query is primarily a base C library. If you are working in Ruby, Go, Python, Rust, or Node.js, consider using one of the [higher-level language wrappers](#language-wrappers) built on top of it.
+</Note>
+
+## Why it exists
+
+The PostgreSQL parser is one of the most battle-tested SQL parsers available, but it lives inside the server and has never been designed for use outside of it. libpg_query extracts that parser and packages it as a standalone C library so you can:
+
+- Parse and analyze SQL queries in your own applications without running a database
+- Build tools that understand SQL at the structural level — linters, formatters, query analyzers, index advisors
+- Work with the same parse tree representation that PostgreSQL itself uses internally
+
+## Key capabilities
+
+<CardGroup cols={2}>
+  <Card title="Parse SQL" icon="sitemap" href="/guides/parsing">
+    Turn SQL text into a structured JSON parse tree matching PostgreSQL's internal representation. Supports all PostgreSQL statement types.
+  </Card>
+  <Card title="Scan tokens" icon="magnifying-glass" href="/guides/scanning">
+    Lex a query into keyword and token types using PostgreSQL's own scanner. Useful for syntax highlighting and token-level analysis.
+  </Card>
+  <Card title="Normalize queries" icon="filter" href="/guides/normalization">
+    Replace literal values with `$1`, `$2`, … parameter placeholders to group structurally identical queries regardless of their literal values.
+  </Card>
+  <Card title="Fingerprint queries" icon="fingerprint" href="/guides/fingerprinting">
+    Generate a stable hash that identifies structurally equivalent queries, even when they differ in formatting or literal values.
+  </Card>
+  <Card title="Deparse SQL" icon="arrow-right-arrow-left" href="/guides/deparsing">
+    Reconstruct canonical SQL text from a parse tree protobuf, with optional pretty-printing. Round-trips through the parse tree to produce normalized output.
+  </Card>
+  <Card title="Parse PL/pgSQL" icon="database" href="/guides/plpgsql">
+    Parse PL/pgSQL function bodies into structured JSON using PostgreSQL's own PL/pgSQL parser.
+  </Card>
+</CardGroup>
+
+## Language wrappers
+
+libpg_query is the foundation for higher-level bindings in many languages. Most users will interact with it through one of these wrappers rather than directly through the C API:
+
+| Language | Library |
+|----------|---------|
+| Ruby | [pg_query](https://github.com/pganalyze/pg_query) |
+| Go | [pg_query_go](https://github.com/pganalyze/pg_query_go) |
+| Rust | [pg_query.rs](https://github.com/pganalyze/pg_query.rs) |
+| Node.js | [pgsql-parser](https://github.com/launchql/pgsql-parser) |
+| Browser (JS) | [pg-query-emscripten](https://github.com/pganalyze/pg-query-emscripten) |
+| Python | [psqlparse](https://github.com/alculquicondor/psqlparse), [pglast](https://github.com/lelit/pglast) |
+| OCaml | [pg_query-ocaml](https://github.com/roddyyaga/pg_query-ocaml) |
+
+## Built with libpg_query
+
+These products and tools use libpg_query (or one of its wrappers) to understand and analyze SQL:
+
+- [pganalyze](https://pganalyze.com/) — PostgreSQL performance monitoring
+- [DuckDB](https://github.com/cwida/duckdb) — uses libpg_query for its SQL parser
+- [Postgres Language Server](https://github.com/supabase/postgres_lsp) — SQL language server by Supabase
+- [pghero](https://github.com/ankane/pghero) — database insights
+- [dexter](https://github.com/ankane/dexter) — automatic indexer
+- [pgspot](https://github.com/timescale/pgspot) — spot errors in SQL migration scripts
+- [sqlint](https://github.com/purcell/sqlint) — simple SQL linter
+- [pgscope](https://github.com/gjalves/pgscope) — query dependency graphing
+- [pg_materialize](https://github.com/aanari/pg-materialize) — materialized view management
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Build the library from source on Linux, macOS, or Windows.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Parse your first SQL query in under five minutes.
+  </Card>
+</CardGroup>

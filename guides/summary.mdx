@@ -1,0 +1,135 @@
+---
+title: "Query summary"
+description: "Extract table references and other summary information from a query without full Protobuf serialization, and check whether a query is a utility statement."
+---
+
+libpg_query provides two lightweight functions for extracting high-level information about a SQL string without the overhead of a full parse and Protobuf serialization: `pg_query_summary` and `pg_query_is_utility_stmt`. Both were introduced in the 17-6.x release series.
+
+## pg_query_summary
+
+`pg_query_summary` (added in 17-6.2.0) parses a query and returns summary information — such as which tables are referenced — as a compact Protobuf blob. It is faster than calling `pg_query_parse_protobuf` and discarding most of the tree, because it skips serializing parts of the tree you rarely need.
+
+### Function signature
+
+```c
+PgQuerySummaryParseResult pg_query_summary(
+    const char* input,
+    int parser_options,
+    int truncate_limit
+);
+```
+
+| Parameter | Description |
+|---|---|
+| `input` | The SQL string to parse |
+| `parser_options` | Parse mode and GUC flags — same encoding as `pg_query_parse_opts` (see [Parse options](/guides/parse-options)) |
+| `truncate_limit` | When greater than zero, omits deeply nested information. Set to `0` to disable truncation. |
+
+### Result struct
+
+```c
+typedef struct {
+  PgQueryProtobuf summary;   /* serialized summary as a Protobuf blob */
+  char*           stderr_buffer;
+  PgQueryError*   error;
+} PgQuerySummaryParseResult;
+```
+
+The `summary` field is a `PgQueryProtobuf` blob (the same `{ size_t len; char* data; }` struct used elsewhere). Decode it with the protobuf-c runtime and the generated bindings in `protobuf/pg_query.pb-c.h`.
+
+### Smart truncation with truncate_limit
+
+When `truncate_limit` is a positive integer, the summary function replaces deeply nested parts of the query with a placeholder. This is useful for storing a readable but shortened version of long queries. The truncation preserves essential structural parts — such as the `FROM` clause — while omitting verbose inner content like CTE definitions or large target lists.
+
+Set `truncate_limit` to `0` to return the full summary without any truncation.
+
+### Example
+
+```c
+#include <pg_query.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+  /* truncate_limit=0 means no truncation */
+  PgQuerySummaryParseResult result = pg_query_summary(
+    "SELECT u.id FROM users u JOIN orders o ON o.user_id = u.id",
+    PG_QUERY_PARSE_DEFAULT,
+    0
+  );
+
+  if (result.error) {
+    printf("error: %s\n", result.error->message);
+    pg_query_free_summary_parse_result(result);
+    return 1;
+  }
+
+  printf("summary protobuf size: %zu bytes\n", result.summary.len);
+
+  pg_query_free_summary_parse_result(result);
+  return 0;
+}
+```
+
+<Note>
+Always call `pg_query_free_summary_parse_result()` after you are done with the result.
+</Note>
+
+---
+
+## pg_query_is_utility_stmt
+
+`pg_query_is_utility_stmt` (added in 17-6.2.1) is a fast check that tells you whether each statement in a SQL string is a utility (DDL/non-DML) statement. It does not return a parse tree.
+
+A utility statement is any statement that is not a plain `SELECT`, `INSERT`, `UPDATE`, `DELETE`, or `MERGE` — for example `CREATE TABLE`, `SET`, `SHOW`, `COPY`, or `VACUUM`.
+
+### Function signature
+
+```c
+PgQueryIsUtilityResult pg_query_is_utility_stmt(const char *query);
+```
+
+### Result struct
+
+```c
+typedef struct {
+  int            length;   /* number of statements found in the input */
+  bool          *items;    /* one bool per statement: true = utility stmt */
+  PgQueryError  *error;
+} PgQueryIsUtilityResult;
+```
+
+### Example
+
+```c
+#include <pg_query.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+  PgQueryIsUtilityResult result = pg_query_is_utility_stmt(
+    "SELECT 1; CREATE TABLE t (id int)"
+  );
+
+  if (result.error) {
+    printf("error: %s\n", result.error->message);
+    pg_query_free_is_utility_result(result);
+    return 1;
+  }
+
+  for (int i = 0; i < result.length; i++) {
+    printf("statement %d: %s\n", i, result.items[i] ? "utility" : "DML");
+  }
+  /* output:
+     statement 0: DML
+     statement 1: utility  */
+
+  pg_query_free_is_utility_result(result);
+  return 0;
+}
+```
+
+<Note>
+Always call `pg_query_free_is_utility_result()` after you are done with the result.
+</Note>

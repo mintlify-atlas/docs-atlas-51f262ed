@@ -1,0 +1,100 @@
+---
+title: "Versions and compatibility"
+description: "How libpg_query is versioned, which branches are active, and recent release history."
+---
+
+## Versioning scheme
+
+libpg_query tags follow a `<pg-major>-<semver>` scheme. The number before the hyphen is the PostgreSQL major version the library is based on. The semver after the hyphen is the library's own version.
+
+For example, `17-6.2.2` means:
+
+- Based on **PostgreSQL 17**
+- Library version **6.2.2**
+
+The current release is **17-6.2.2**, which embeds PostgreSQL **17.7** (`PG_VERSION_NUM = 170007`).
+
+<Tip>
+  For production use, always depend on a specific tagged release rather than a branch tip (e.g. `17-latest`). Branch tips move forward and may introduce breaking changes.
+</Tip>
+
+---
+
+## Version constants
+
+The following preprocessor constants are defined in `pg_query.h` and reflect the embedded PostgreSQL version:
+
+```c
+#define PG_MAJORVERSION  "17"
+#define PG_VERSION       "17.7"
+#define PG_VERSION_NUM   170007
+```
+
+| Constant | Value | Description |
+| -------- | ----- | ----------- |
+| `PG_MAJORVERSION` | `"17"` | PostgreSQL major version as a string. |
+| `PG_VERSION` | `"17.7"` | Full PostgreSQL version as a string. |
+| `PG_VERSION_NUM` | `170007` | Numeric PostgreSQL version (`MMNNPP` format). |
+
+---
+
+## Branch and support status
+
+Each PostgreSQL major version has a dedicated git branch. Only the latest PostgreSQL stable release receives active updates; older branches receive critical fixes only or are no longer supported.
+
+| PostgreSQL major version | Branch | Status |
+| ------------------------ | ------ | ------ |
+| 17 | `17-latest` | Active development |
+| 16 | `16-latest` | Critical fixes only |
+| 15 | `15-latest` | Critical fixes only |
+| 14 | `14-latest` | Critical fixes only |
+| 13 | `13-latest` | Critical fixes only |
+| 12 | (n/a) | Not supported |
+| 11 | (n/a) | Not supported |
+| 10 | `10-latest` | No longer supported |
+| 9.6 | (n/a) | Not supported |
+| 9.5 | `9.5-latest` | No longer supported |
+| 9.4 | `9.4-latest` | No longer supported |
+
+<Warning>
+  Branches marked "No longer supported" or "Not supported" do not receive any updates, including security fixes. Use the latest active branch for new projects.
+</Warning>
+
+---
+
+## Recent releases
+
+### 17-6.2.2 — 2026-01-26
+
+- `pg_query_normalize`: fix crash when handling special strings in `DefElem` nodes inside certain utility statements.
+- `pg_query_deparse_comments_for_query`: fix missing initialization that caused a crash when the caller reads the `error` field on a successful result.
+
+### 17-6.2.1 — 2026-01-14
+
+- Add `pg_query_is_utility_stmt` function for fast detection of utility statements without building a full parse tree.
+- Fix missing installation of `postgres_deparse.h` in the Makefile `install` step (regression from 6.2.0).
+- Improve `pg_query_summary`: speed up truncate replacement logic, correctly handle `GRANT .. ON ALL TABLES IN SCHEMA`, and correctly handle schema-qualified filter columns.
+
+### 17-6.2.0 — 2025-12-10
+
+- Add `pg_query_summary` for fast high-level information extraction (e.g. referenced tables) and smart query truncation.
+- Deparser: introduce pretty-printing / formatting with configurable indent size, line length, trailing newline, and comma placement.
+- Deparser: prefer `(..)::type` typecast syntax; use lowercase keywords in `xmlroot` functions; fix `ALTER TABLE … SET STATISTICS DEFAULT` and identity-column null pointer dereference.
+- Allow alternate definitions of `NAMEDATALEN` to build with a non-default identifier length limit.
+- Normalization: add support for `CALL` statements.
+- Bump embedded PostgreSQL to 17.7.
+
+### 17-6.1.0 — 2025-04-02
+
+- Update embedded PostgreSQL to 17.4 and include patches scheduled for 17.5.
+- Fix builds on macOS 15.4 (defines `strchrnul` in its standard library).
+- Deparser: add parentheses around `AT LOCAL` / `AT TIMEZONE` where needed; various expression and function-call correctness improvements.
+
+### 17-6.0.0 — 2024-09-27
+
+- Upgrade embedded PostgreSQL to version 17.
+- Deparser: add support for `JSON_TABLE`, `JSON_QUERY`, `JSON_EXISTS`, `JSON_VALUE`, `JSON`, `JSON_SCALAR`, `JSON_SERIALIZE`, `COPY … FORCE_NULL(*)`, `ALTER COLUMN … SET EXPRESSION AS`, `SET STATISTICS DEFAULT`, `SET ACCESS METHOD DEFAULT`, `… AT LOCAL`, `merge_action()`, `MERGE … RETURNING`, and `NOT MATCHED [ BY TARGET ]`.
+
+<Note>
+  For the full release history, see the [CHANGELOG](https://github.com/pganalyze/libpg_query/blob/17-latest/CHANGELOG.md) in the repository.
+</Note>

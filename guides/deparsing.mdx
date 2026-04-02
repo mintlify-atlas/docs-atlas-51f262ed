@@ -1,0 +1,142 @@
+---
+title: 'Deparsing SQL'
+description: 'Use pg_query_deparse_protobuf() to convert a Protobuf parse tree back into a SQL string.'
+---
+
+Deparsing is the reverse of parsing: it takes a parse tree (in Protobuf format) and produces a SQL text string. You can use this to canonicalize SQL, format queries consistently, or reconstruct SQL after programmatically modifying a parse tree.
+
+A common pattern is a **round-trip**: parse SQL to a Protobuf tree, optionally transform the tree, then deparse it back to SQL.
+
+## Function signatures
+
+```c
+PgQueryDeparseResult pg_query_deparse_protobuf(PgQueryProtobuf parse_tree);
+PgQueryDeparseResult pg_query_deparse_protobuf_opts(PgQueryProtobuf parse_tree,
+                                                     struct PostgresDeparseOpts opts);
+```
+
+`pg_query_deparse_protobuf()` uses default output options. `pg_query_deparse_protobuf_opts()` accepts a `PostgresDeparseOpts` struct for controlling formatting.
+
+### Result struct
+
+```c
+typedef struct {
+  char* query;         // The deparsed SQL string, or NULL on error
+  PgQueryError* error; // NULL on success, populated on error
+} PgQueryDeparseResult;
+```
+
+## Deparse options
+
+```c
+typedef struct PostgresDeparseOpts {
+    PostgresDeparseComment **comments; // Optional comments to re-insert
+    size_t comment_count;
+
+    // Pretty print options
+    bool pretty_print;        // Enable pretty printing (default off)
+    int  indent_size;         // Indentation size in spaces (default 4)
+    int  max_line_length;     // Soft limit for line length of certain lists (default 80)
+    bool trailing_newline;    // Add a trailing newline at end of output (default off)
+    bool commas_start_of_line; // Place commas at start of line instead of end (default off)
+} PostgresDeparseOpts;
+```
+
+When `pretty_print` is `false` (the default), the deparsed SQL is returned on a single line without any extra whitespace. When `pretty_print` is `true`, the output is formatted across multiple lines using `indent_size`-space indentation, with lines wrapped at `max_line_length` where possible.
+
+## Round-trip example
+
+Parse a query to Protobuf, then deparse it back to SQL:
+
+```c
+#include <pg_query.h>
+#include <stdio.h>
+
+int main() {
+  // Step 1: parse to Protobuf
+  PgQueryProtobufParseResult parse_result;
+  parse_result = pg_query_parse_protobuf("SELECT a AS b FROM public.x WHERE y = 5");
+
+  if (parse_result.error) {
+    printf("parse error: %s\n", parse_result.error->message);
+    pg_query_free_protobuf_parse_result(parse_result);
+    return 1;
+  }
+
+  // Step 2: deparse back to SQL
+  PgQueryDeparseResult deparse_result;
+  deparse_result = pg_query_deparse_protobuf(parse_result.parse_tree);
+
+  if (deparse_result.error) {
+    printf("deparse error: %s\n", deparse_result.error->message);
+  } else {
+    printf("%s\n", deparse_result.query);
+    // Output: SELECT a AS b FROM public.x WHERE y = 5
+  }
+
+  pg_query_free_deparse_result(deparse_result);
+  pg_query_free_protobuf_parse_result(parse_result);
+
+  return 0;
+}
+```
+
+## Pretty printing
+
+Enable pretty printing by setting `pretty_print = true` in the options struct:
+
+```c
+PgQueryProtobufParseResult parse_result;
+parse_result = pg_query_parse_protobuf(
+    "SELECT memory_total_bytes, memory_swap_total_bytes - memory_swap_free_bytes AS swap, "
+    "date_part('year', s.collected_at) AS collected_at FROM snapshots s "
+    "JOIN system_snapshots ON snapshot_id = s.id "
+    "WHERE s.database_id = 23 ORDER BY collected_at ASC");
+
+PostgresDeparseOpts opts = {0};
+opts.pretty_print = true;
+opts.indent_size = 4;
+opts.max_line_length = 80;
+
+PgQueryDeparseResult result;
+result = pg_query_deparse_protobuf_opts(parse_result.parse_tree, opts);
+
+printf("%s\n", result.query);
+
+pg_query_free_deparse_result(result);
+pg_query_free_protobuf_parse_result(parse_result);
+```
+
+## Comment handling
+
+Comments are stripped during parsing and are not preserved in the parse tree. To re-insert them during deparsing, use `pg_query_deparse_comments_for_query()` to extract comment metadata from the original SQL, then pass it via `PostgresDeparseOpts`:
+
+```c
+PgQueryDeparseCommentsResult comments_result;
+comments_result = pg_query_deparse_comments_for_query(
+    "SELECT a, /* pick b */ b FROM t");
+
+PostgresDeparseOpts opts = {0};
+opts.comments = comments_result.comments;
+opts.comment_count = comments_result.comment_count;
+
+PgQueryDeparseResult result;
+result = pg_query_deparse_protobuf_opts(parse_tree, opts);
+
+pg_query_free_deparse_comments_result(comments_result);
+```
+
+The `PostgresDeparseComment` struct holds the information needed to place each comment back in the correct position relative to the nodes in the deparsed output:
+
+```c
+typedef struct PostgresDeparseComment {
+    int  match_location;          // Insert before the node at or after this location
+    int  newlines_before_comment; // Newlines to emit before the comment
+    int  newlines_after_comment;  // Newlines to emit after the comment
+    char *str;                    // The comment text, including delimiters
+} PostgresDeparseComment;
+```
+
+<Note>
+Always call `pg_query_free_deparse_result(result)` after you are done with the result. This releases the memory allocated for `query` and `error`.
+</Note>

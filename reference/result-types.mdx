@@ -1,0 +1,525 @@
+---
+title: "Result types"
+description: "Complete reference for every struct and enum in the libpg_query public API."
+---
+
+All structs and enums below are defined in `pg_query.h` and `postgres_deparse.h`.
+
+---
+
+## Error type
+
+### `PgQueryError`
+
+Returned via a pointer field named `error` on every result struct. When `error` is `NULL` the call succeeded.
+
+```c
+typedef struct {
+    char* message;
+    char* funcname;
+    char* filename;
+    int   lineno;
+    int   cursorpos;
+    char* context;
+} PgQueryError;
+```
+
+<ResponseField name="message" type="char*" required>
+  Human-readable exception message.
+</ResponseField>
+
+<ResponseField name="funcname" type="char*" required>
+  Name of the PostgreSQL source function that raised the exception (e.g. `SearchSysCache`).
+</ResponseField>
+
+<ResponseField name="filename" type="char*" required>
+  Name of the PostgreSQL source file where the exception originated (e.g. `parse.l`).
+</ResponseField>
+
+<ResponseField name="lineno" type="int" required>
+  Line number in the PostgreSQL source file.
+</ResponseField>
+
+<ResponseField name="cursorpos" type="int" required>
+  Character offset in the input query string where the exception occurred.
+</ResponseField>
+
+<ResponseField name="context" type="char*">
+  Optional additional context string. May be `NULL`.
+</ResponseField>
+
+---
+
+## Binary buffer
+
+### `PgQueryProtobuf`
+
+A length-prefixed byte buffer used to hold serialized Protobuf messages.
+
+```c
+typedef struct {
+    size_t len;
+    char*  data;
+} PgQueryProtobuf;
+```
+
+<ResponseField name="len" type="size_t" required>
+  Length of the serialized Protobuf data in bytes.
+</ResponseField>
+
+<ResponseField name="data" type="char*" required>
+  Raw serialized Protobuf bytes. Pass to the appropriate `protobuf-c` unpack function.
+</ResponseField>
+
+---
+
+## Parse result types
+
+### `PgQueryParseResult`
+
+Returned by [`pg_query_parse`](/reference/api#pg_query_parse) and [`pg_query_parse_opts`](/reference/api#pg_query_parse_opts).
+
+```c
+typedef struct {
+    char*          parse_tree;
+    char*          stderr_buffer;
+    PgQueryError*  error;
+} PgQueryParseResult;
+```
+
+<ResponseField name="parse_tree" type="char*">
+  JSON-encoded parse tree string. `NULL` when `error` is set.
+</ResponseField>
+
+<ResponseField name="stderr_buffer" type="char*">
+  Any stderr output captured during parsing. May be `NULL`.
+</ResponseField>
+
+<ResponseField name="error" type="PgQueryError*">
+  Parse error details, or `NULL` on success.
+</ResponseField>
+
+---
+
+### `PgQueryProtobufParseResult`
+
+Returned by [`pg_query_parse_protobuf`](/reference/api#pg_query_parse_protobuf) and [`pg_query_parse_protobuf_opts`](/reference/api#pg_query_parse_protobuf_opts).
+
+```c
+typedef struct {
+    PgQueryProtobuf  parse_tree;
+    char*            stderr_buffer;
+    PgQueryError*    error;
+} PgQueryProtobufParseResult;
+```
+
+<ResponseField name="parse_tree" type="PgQueryProtobuf" required>
+  Serialized Protobuf parse tree. Unpack with `pg_query__parse_result__unpack` from `protobuf/pg_query.pb-c.h`.
+</ResponseField>
+
+<ResponseField name="stderr_buffer" type="char*">
+  Captured stderr output. May be `NULL`.
+</ResponseField>
+
+<ResponseField name="error" type="PgQueryError*">
+  Parse error details, or `NULL` on success.
+</ResponseField>
+
+---
+
+### `PgQueryPlpgsqlParseResult`
+
+Returned by [`pg_query_parse_plpgsql`](/reference/api#pg_query_parse_plpgsql).
+
+```c
+typedef struct {
+    char*         plpgsql_funcs;
+    PgQueryError* error;
+} PgQueryPlpgsqlParseResult;
+```
+
+<ResponseField name="plpgsql_funcs" type="char*">
+  JSON-encoded array of parsed PL/pgSQL function objects. `NULL` when `error` is set.
+</ResponseField>
+
+<ResponseField name="error" type="PgQueryError*">
+  Parse error details, or `NULL` on success.
+</ResponseField>
+
+---
+
+## Scan result type
+
+### `PgQueryScanResult`
+
+Returned by [`pg_query_scan`](/reference/api#pg_query_scan).
+
+```c
+typedef struct {
+    PgQueryProtobuf  pbuf;
+    char*            stderr_buffer;
+    PgQueryError*    error;
+} PgQueryScanResult;
+```
+
+<ResponseField name="pbuf" type="PgQueryProtobuf" required>
+  Serialized Protobuf `ScanResult` message containing all tokens. Unpack with `pg_query__scan_result__unpack` from `protobuf/pg_query.pb-c.h`.
+</ResponseField>
+
+<ResponseField name="stderr_buffer" type="char*">
+  Captured stderr output. May be `NULL`.
+</ResponseField>
+
+<ResponseField name="error" type="PgQueryError*">
+  Scan error details, or `NULL` on success.
+</ResponseField>
+
+---
+
+## Normalization result type
+
+### `PgQueryNormalizeResult`
+
+Returned by [`pg_query_normalize`](/reference/api#pg_query_normalize) and [`pg_query_normalize_utility`](/reference/api#pg_query_normalize_utility).
+
+```c
+typedef struct {
+    char*         normalized_query;
+    PgQueryError* error;
+} PgQueryNormalizeResult;
+```
+
+<ResponseField name="normalized_query" type="char*">
+  The normalized SQL string with literal constants replaced by `$n` placeholders. `NULL` when `error` is set.
+</ResponseField>
+
+<ResponseField name="error" type="PgQueryError*">
+  Error details, or `NULL` on success.
+</ResponseField>
+
+---
+
+## Fingerprint result type
+
+### `PgQueryFingerprintResult`
+
+Returned by [`pg_query_fingerprint`](/reference/api#pg_query_fingerprint) and [`pg_query_fingerprint_opts`](/reference/api#pg_query_fingerprint_opts).
+
+```c
+typedef struct {
+    uint64_t      fingerprint;
+    char*         fingerprint_str;
+    char*         stderr_buffer;
+    PgQueryError* error;
+} PgQueryFingerprintResult;
+```
+
+<ResponseField name="fingerprint" type="uint64_t" required>
+  64-bit XXH3 fingerprint value.
+</ResponseField>
+
+<ResponseField name="fingerprint_str" type="char*" required>
+  Lowercase hexadecimal string representation of the fingerprint (e.g. `"50fde20626009aba"`).
+</ResponseField>
+
+<ResponseField name="stderr_buffer" type="char*">
+  Captured stderr output. May be `NULL`.
+</ResponseField>
+
+<ResponseField name="error" type="PgQueryError*">
+  Error details, or `NULL` on success.
+</ResponseField>
+
+---
+
+## Statement split result types
+
+### `PgQuerySplitResult`
+
+Returned by [`pg_query_split_with_scanner`](/reference/api#pg_query_split_with_scanner) and [`pg_query_split_with_parser`](/reference/api#pg_query_split_with_parser).
+
+```c
+typedef struct {
+    PgQuerySplitStmt** stmts;
+    int                n_stmts;
+    char*              stderr_buffer;
+    PgQueryError*      error;
+} PgQuerySplitResult;
+```
+
+<ResponseField name="stmts" type="PgQuerySplitStmt**" required>
+  Array of pointers to [`PgQuerySplitStmt`](#pgquerysplitstmt) span descriptors.
+</ResponseField>
+
+<ResponseField name="n_stmts" type="int" required>
+  Number of entries in the `stmts` array.
+</ResponseField>
+
+<ResponseField name="stderr_buffer" type="char*">
+  Captured stderr output. May be `NULL`.
+</ResponseField>
+
+<ResponseField name="error" type="PgQueryError*">
+  Error details, or `NULL` on success.
+</ResponseField>
+
+---
+
+### `PgQuerySplitStmt`
+
+Describes the byte span of a single statement within the original input string.
+
+```c
+typedef struct {
+    int stmt_location;
+    int stmt_len;
+} PgQuerySplitStmt;
+```
+
+<ResponseField name="stmt_location" type="int" required>
+  Byte offset of the first character of the statement in the input string.
+</ResponseField>
+
+<ResponseField name="stmt_len" type="int" required>
+  Byte length of the statement.
+</ResponseField>
+
+---
+
+## Deparse result types
+
+### `PgQueryDeparseResult`
+
+Returned by [`pg_query_deparse_protobuf`](/reference/api#pg_query_deparse_protobuf) and [`pg_query_deparse_protobuf_opts`](/reference/api#pg_query_deparse_protobuf_opts).
+
+```c
+typedef struct {
+    char*         query;
+    PgQueryError* error;
+} PgQueryDeparseResult;
+```
+
+<ResponseField name="query" type="char*">
+  Reconstructed SQL string. `NULL` when `error` is set.
+</ResponseField>
+
+<ResponseField name="error" type="PgQueryError*">
+  Error details, or `NULL` on success.
+</ResponseField>
+
+---
+
+### `PgQueryDeparseCommentsResult`
+
+Returned by [`pg_query_deparse_comments_for_query`](/reference/api#pg_query_deparse_comments_for_query).
+
+```c
+typedef struct {
+    PostgresDeparseComment** comments;
+    size_t                   comment_count;
+    PgQueryError*            error;
+} PgQueryDeparseCommentsResult;
+```
+
+<ResponseField name="comments" type="PostgresDeparseComment**" required>
+  Array of pointers to [`PostgresDeparseComment`](#postgresdeparsecomment) structs.
+</ResponseField>
+
+<ResponseField name="comment_count" type="size_t" required>
+  Number of entries in the `comments` array.
+</ResponseField>
+
+<ResponseField name="error" type="PgQueryError*">
+  Error details, or `NULL` on success.
+</ResponseField>
+
+---
+
+## Utility check result type
+
+### `PgQueryIsUtilityResult`
+
+Returned by [`pg_query_is_utility_stmt`](/reference/api#pg_query_is_utility_stmt).
+
+```c
+typedef struct {
+    int           length;
+    bool*         items;
+    PgQueryError* error;
+} PgQueryIsUtilityResult;
+```
+
+<ResponseField name="length" type="int" required>
+  Number of statements found in the input.
+</ResponseField>
+
+<ResponseField name="items" type="bool*" required>
+  Array of `length` booleans. Each entry is `true` if the corresponding statement is a utility (non-DML) statement.
+</ResponseField>
+
+<ResponseField name="error" type="PgQueryError*">
+  Error details, or `NULL` on success.
+</ResponseField>
+
+---
+
+## Summary parse result type
+
+### `PgQuerySummaryParseResult`
+
+Returned by [`pg_query_summary`](/reference/api#pg_query_summary).
+
+```c
+typedef struct {
+    PgQueryProtobuf  summary;
+    char*            stderr_buffer;
+    PgQueryError*    error;
+} PgQuerySummaryParseResult;
+```
+
+<ResponseField name="summary" type="PgQueryProtobuf" required>
+  Serialized Protobuf summary message. Contains high-level information such as referenced tables.
+</ResponseField>
+
+<ResponseField name="stderr_buffer" type="char*">
+  Captured stderr output. May be `NULL`.
+</ResponseField>
+
+<ResponseField name="error" type="PgQueryError*">
+  Error details, or `NULL` on success.
+</ResponseField>
+
+---
+
+## Deparse option types
+
+### `PostgresDeparseOpts`
+
+Controls output formatting for [`pg_query_deparse_protobuf_opts`](/reference/api#pg_query_deparse_protobuf_opts). Defined in `postgres_deparse.h`.
+
+```c
+typedef struct PostgresDeparseOpts {
+    PostgresDeparseComment** comments;
+    size_t                   comment_count;
+    bool   pretty_print;
+    int    indent_size;
+    int    max_line_length;
+    bool   trailing_newline;
+    bool   commas_start_of_line;
+} PostgresDeparseOpts;
+```
+
+<ResponseField name="comments" type="PostgresDeparseComment**">
+  Array of comments to re-insert into the deparsed output. Obtain via [`pg_query_deparse_comments_for_query`](/reference/api#pg_query_deparse_comments_for_query). May be `NULL`.
+</ResponseField>
+
+<ResponseField name="comment_count" type="size_t">
+  Number of entries in the `comments` array.
+</ResponseField>
+
+<ResponseField name="pretty_print" type="bool">
+  When `true`, emit human-readable multi-line output. Default: `false`.
+</ResponseField>
+
+<ResponseField name="indent_size" type="int">
+  Number of spaces per indentation level when `pretty_print` is enabled. Default: `4`.
+</ResponseField>
+
+<ResponseField name="max_line_length" type="int">
+  Maximum line length for wrapping certain lists of items when `pretty_print` is enabled. Default: `80`.
+</ResponseField>
+
+<ResponseField name="trailing_newline" type="bool">
+  When `true`, append a trailing newline to the output. Default: `false`.
+</ResponseField>
+
+<ResponseField name="commas_start_of_line" type="bool">
+  When `true`, place separating commas at the start of the next line rather than the end of the current line. Default: `false`.
+</ResponseField>
+
+---
+
+### `PostgresDeparseComment`
+
+Describes a single SQL comment extracted from a query, for re-insertion during deparsing. Defined in `postgres_deparse.h`.
+
+```c
+typedef struct PostgresDeparseComment {
+    int   match_location;
+    int   newlines_before_comment;
+    int   newlines_after_comment;
+    char* str;
+} PostgresDeparseComment;
+```
+
+<ResponseField name="match_location" type="int" required>
+  Insert this comment before the first parse-tree node whose `location` field is greater than or equal to this value.
+</ResponseField>
+
+<ResponseField name="newlines_before_comment" type="int" required>
+  Number of newlines to insert before the comment. Non-zero when the original comment was separated from the preceding token by at least one newline.
+</ResponseField>
+
+<ResponseField name="newlines_after_comment" type="int" required>
+  Number of newlines to insert after the comment. Non-zero when the original comment was separated from the following token by at least one newline.
+</ResponseField>
+
+<ResponseField name="str" type="char*" required>
+  Full comment text, including the comment start/end tokens (e.g. `/* … */` or `-- …`) and any embedded newline characters.
+</ResponseField>
+
+---
+
+## Enums and constants
+
+### `PgQueryParseMode`
+
+Controls what the parser treats the input as. Pass as the low-order bits of the `parser_options` integer using functions that end in `_opts`.
+
+```c
+typedef enum {
+    PG_QUERY_PARSE_DEFAULT         = 0,
+    PG_QUERY_PARSE_TYPE_NAME,
+    PG_QUERY_PARSE_PLPGSQL_EXPR,
+    PG_QUERY_PARSE_PLPGSQL_ASSIGN1,
+    PG_QUERY_PARSE_PLPGSQL_ASSIGN2,
+    PG_QUERY_PARSE_PLPGSQL_ASSIGN3
+} PgQueryParseMode;
+```
+
+| Value | Description |
+| ----- | ----------- |
+| `PG_QUERY_PARSE_DEFAULT` | Standard SQL query parsing (the default). |
+| `PG_QUERY_PARSE_TYPE_NAME` | Parse input as a type name. |
+| `PG_QUERY_PARSE_PLPGSQL_EXPR` | Parse input as a PL/pgSQL expression. |
+| `PG_QUERY_PARSE_PLPGSQL_ASSIGN1` | Parse input as a PL/pgSQL assignment (target variant 1). |
+| `PG_QUERY_PARSE_PLPGSQL_ASSIGN2` | Parse input as a PL/pgSQL assignment (target variant 2). |
+| `PG_QUERY_PARSE_PLPGSQL_ASSIGN3` | Parse input as a PL/pgSQL assignment (target variant 3). |
+
+The parse mode occupies the lowest 4 bits of `parser_options` (`PG_QUERY_PARSE_MODE_BITS = 4`).
+
+---
+
+### Parser option constants
+
+Bitwise-OR these flags into `parser_options` alongside a `PgQueryParseMode` value to change GUC settings that affect parsing.
+
+```c
+#define PG_QUERY_DISABLE_BACKSLASH_QUOTE              16
+#define PG_QUERY_DISABLE_STANDARD_CONFORMING_STRINGS  32
+#define PG_QUERY_DISABLE_ESCAPE_STRING_WARNING        64
+```
+
+| Constant | Value | Effect |
+| -------- | ----- | ------ |
+| `PG_QUERY_DISABLE_BACKSLASH_QUOTE` | `16` | Sets `backslash_quote = off`. The default is `safe_encoding`, which is effectively on. |
+| `PG_QUERY_DISABLE_STANDARD_CONFORMING_STRINGS` | `32` | Sets `standard_conforming_strings = off`. The default is on. |
+| `PG_QUERY_DISABLE_ESCAPE_STRING_WARNING` | `64` | Sets `escape_string_warning = off`. The default is on. |
+
+**Example — combine parse mode and flags:**
+
+```c
+int opts = PG_QUERY_PARSE_TYPE_NAME
+         | PG_QUERY_DISABLE_STANDARD_CONFORMING_STRINGS;
+PgQueryParseResult result = pg_query_parse_opts("text", opts);
+```

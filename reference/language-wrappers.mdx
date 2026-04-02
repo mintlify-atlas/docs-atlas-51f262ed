@@ -1,0 +1,105 @@
+---
+title: "Language wrappers"
+description: "Higher-level libraries built on libpg_query for Ruby, Go, Rust, JavaScript, Python, OCaml, and more."
+---
+
+libpg_query is primarily a base C library. Most applications use a higher-level language wrapper instead of calling the C API directly.
+
+<Note>
+  Each wrapper has its own API that may differ significantly from the C API documented in this reference. Consult the wrapper's own documentation for usage instructions.
+</Note>
+
+---
+
+## Wrappers by language
+
+<CardGroup cols={2}>
+  <Card
+    title="Ruby — pg_query"
+    icon="gem"
+    href="https://github.com/pganalyze/pg_query"
+  >
+    The original pg_query library. Provides idiomatic Ruby objects for parse trees, normalization, fingerprinting, and deparsing.
+  </Card>
+
+  <Card
+    title="Go — pg_query_go"
+    icon="golang"
+    href="https://github.com/pganalyze/pg_query_go"
+  >
+    Go bindings for libpg_query. Returns Protobuf-backed Go structs for parsed statements.
+  </Card>
+
+  <Card
+    title="Rust — pg_query.rs"
+    icon="rust"
+    href="https://github.com/pganalyze/pg_query.rs"
+  >
+    Rust bindings with safe wrappers around the C API. Parse trees are exposed as generated Protobuf structs.
+  </Card>
+
+  <Card
+    title="JavaScript (Node) — pgsql-parser"
+    icon="node-js"
+    href="https://github.com/launchql/pgsql-parser"
+  >
+    Node.js bindings. Parse, deparse, and manipulate PostgreSQL ASTs from JavaScript or TypeScript.
+  </Card>
+
+  <Card
+    title="JavaScript (Browser) — pg-query-emscripten"
+    icon="js"
+    href="https://github.com/pganalyze/pg-query-emscripten"
+  >
+    libpg_query compiled to WebAssembly via Emscripten. Runs parsing directly in the browser without a server.
+  </Card>
+
+  <Card
+    title="Python — psqlparse"
+    icon="python"
+    href="https://github.com/alculquicondor/psqlparse"
+  >
+    Python 2/3 wrapper providing access to the PostgreSQL parse tree.
+  </Card>
+
+  <Card
+    title="Python — pglast"
+    icon="python"
+    href="https://github.com/lelit/pglast"
+  >
+    Python 3 library with idiomatic object wrappers, visitors, and a pretty-printer built on libpg_query.
+  </Card>
+
+  <Card
+    title="Python — psqlparse2"
+    icon="python"
+    href="https://github.com/dani-maarouf/psqlparse2"
+  >
+    An updated Python 3 fork of psqlparse.
+  </Card>
+
+  <Card
+    title="OCaml — pg_query-ocaml"
+    icon="code"
+    href="https://github.com/roddyyaga/pg_query-ocaml"
+  >
+    OCaml bindings to libpg_query.
+  </Card>
+</CardGroup>
+
+---
+
+## Projects built on libpg_query
+
+The following products, tools, and libraries use libpg_query (or a language wrapper) in production:
+
+- [pganalyze](https://pganalyze.com/) — PostgreSQL performance monitoring
+- [hsql](https://github.com/JackDanger/hsql) — SQL query manipulation tool
+- [sqlint](https://github.com/purcell/sqlint) — SQL linting tool
+- [pghero](https://github.com/ankane/pghero) — PostgreSQL performance dashboard
+- [dexter](https://github.com/ankane/dexter) — automatic index advisor
+- [pgscope](https://github.com/gjalves/pgscope) — query dependency visualization
+- [pg_materialize](https://github.com/aanari/pg-materialize) — materialized view manager
+- [DuckDB](https://github.com/cwida/duckdb) — uses libpg_query's parser as an embedded component
+- [pgspot](https://github.com/timescale/pgspot) — PostgreSQL extension security analysis
+- [Postgres Language Server](https://github.com/supabase/postgres_lsp) — LSP-based SQL editor tooling

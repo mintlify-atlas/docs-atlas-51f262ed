@@ -1,0 +1,94 @@
+---
+title: "Installation"
+description: "Build libpg_query from source on Linux, macOS, or Windows."
+---
+
+libpg_query is distributed as source code and compiled directly into your project. It is not published to a package registry — you build it from the Git repository.
+
+<Note>
+  Building libpg_query compiles parts of the PostgreSQL source. Expect the initial `make` to take up to 3 minutes.
+</Note>
+
+## Prerequisites
+
+- C compiler (GCC or Clang on Linux/macOS; MSVC on Windows)
+- `make` (Linux/macOS) or `nmake` (Windows)
+- `git`
+
+## Build from source
+
+<Tabs>
+  <Tab title="Linux / macOS">
+    <Steps>
+      <Step title="Clone the repository">
+        Clone the `17-latest` branch (tracking PostgreSQL 17, the active development branch):
+
+        ```bash
+        git clone -b 17-latest git://github.com/pganalyze/libpg_query
+        cd libpg_query
+        ```
+
+        For a production build, use a specific tagged version instead of a branch tip:
+
+        ```bash
+        git clone --branch 17-6.2.2 git://github.com/pganalyze/libpg_query
+        cd libpg_query
+        ```
+      </Step>
+      <Step title="Build the library">
+        ```bash
+        make
+        ```
+
+        This produces `libpg_query.a` (static) and `libpg_query.so` / `libpg_query.dylib` (shared) in the repository root.
+      </Step>
+      <Step title="Link your program">
+        Include the header and link against the library when compiling your program:
+
+        ```bash
+        cc -Ilibpg_query -Llibpg_query myprogram.c -lpg_query
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Windows">
+    <Steps>
+      <Step title="Clone the repository">
+        ```bash
+        git clone -b 17-latest git://github.com/pganalyze/libpg_query
+        cd libpg_query
+        ```
+      </Step>
+      <Step title="Build with nmake">
+        Open a Visual Studio Developer Command Prompt and run:
+
+        ```bash
+        nmake /F Makefile.msvc
+        ```
+      </Step>
+      <Step title="Link your program">
+        Add `src/postgres/include/port/win32` to your include path. When using MSVC, also add `src/postgres/include/port/win32_msvc`. Link against the resulting library.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Debug and Valgrind builds
+
+To build with assertions enabled (useful for development):
+
+```bash
+make DEBUG=1
+```
+
+To build optimized for use with Valgrind (disables `-O3`):
+
+```bash
+make VALGRIND=1
+```
+
+## Version tagging
+
+Each release is tagged with the PostgreSQL major version and a semver suffix, for example `17-6.2.2`. For production use, always pin to a specific tag rather than a branch.
+
+See the [Versions reference](/reference/versions) for the full list of supported branches and their status.

@@ -1,0 +1,186 @@
+---
+title: 'Parsing SQL'
+description: "Use pg_query_parse() to convert SQL text into a JSON parse tree that mirrors PostgreSQL's internal representation."
+---
+
+`pg_query_parse()` runs the actual PostgreSQL parser and returns a JSON string containing the parse tree for one or more SQL statements. Because it uses the real PostgreSQL server source, the tree is identical to what the server would produce internally.
+
+## Function signature
+
+```c
+PgQueryParseResult pg_query_parse(const char* input);
+```
+
+The `input` parameter is a null-terminated SQL string. Multiple statements separated by `;` are all parsed in a single call.
+
+### Result struct
+
+```c
+typedef struct {
+  char* parse_tree;    // JSON string of the parse tree, or NULL on error
+  char* stderr_buffer; // Any stderr output captured during parsing
+  PgQueryError* error; // NULL on success, populated on parse error
+} PgQueryParseResult;
+```
+
+### Error struct
+
+```c
+typedef struct {
+  char* message;   // Exception message
+  char* funcname;  // Source function where the exception occurred
+  char* filename;  // Source file where the exception occurred
+  int   lineno;    // Line number in the source file
+  int   cursorpos; // Character position in the query where the error occurred
+  char* context;   // Additional context (optional, may be NULL)
+} PgQueryError;
+```
+
+## Basic example
+
+```c
+// Compile: cc -I../ -L../ simple.c -lpg_query
+#include <pg_query.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+size_t testCount = 6;
+const char* tests[] = {
+  "SELECT 1",
+  "SELECT * FROM x WHERE z = 2",
+  "SELECT 5.41414",
+  "SELECT $1",
+  "SELECT 999999999999999999999::numeric/1000000000000000000000",
+  "SELECT 4790999999999999999999999999999999999999999999999999999999999999999999999999999999999999 * 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
+};
+
+int main() {
+  PgQueryParseResult result;
+  size_t i;
+
+  for (i = 0; i < testCount; i++) {
+    result = pg_query_parse(tests[i]);
+
+    if (result.error) {
+      printf("error: %s at %d\n", result.error->message, result.error->cursorpos);
+    } else {
+      printf("%s\n", result.parse_tree);
+    }
+
+    pg_query_free_parse_result(result);
+  }
+
+  // Optional: frees the top-level memory context (useful when running Valgrind)
+  pg_query_exit();
+
+  return 0;
+}
+```
+
+## Parse tree structure
+
+For `SELECT 1`, the output (formatted for readability) is:
+
+```json
+{
+    "version": 170007,
+    "stmts": [
+        {
+            "stmt": {
+                "SelectStmt": {
+                    "targetList": [
+                        {
+                            "ResTarget": {
+                                "val": {
+                                    "A_Const": {
+                                        "val": {
+                                            "Integer": {
+                                                "ival": 1
+                                            }
+                                        },
+                                        "location": 7
+                                    }
+                                },
+                                "location": 7
+                            }
+                        }
+                    ],
+                    "limitOption": "LIMIT_OPTION_DEFAULT",
+                    "op": "SETOP_NONE"
+                }
+            }
+        }
+    ]
+}
+```
+
+The top-level object has two fields:
+
+| Field     | Description |
+|-----------|-------------|
+| `version` | The PostgreSQL version number this parse tree was produced with (e.g. `170007` for PostgreSQL 17.7). |
+| `stmts`   | An array of statement objects. Each entry has a `stmt` key containing the parsed statement node, and optional `stmt_location` / `stmt_len` fields indicating the byte offsets in the original input. |
+
+Each node in the tree is represented as a JSON object with a single key that is the node type name (e.g. `SelectStmt`, `ResTarget`, `A_Const`), whose value contains the node's fields. This mirrors PostgreSQL's internal `Node` representation exactly.
+
+## Error handling
+
+When the input is not valid SQL, `result.error` is non-NULL. The `cursorpos` field points to the character offset in the input where the parser detected the problem.
+
+```c
+#include <pg_query.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+  PgQueryParseResult result;
+
+  result = pg_query_parse("INSERT FROM DOES NOT WORK");
+
+  if (result.error) {
+    printf("error: %s at location %d (%s in %s:%d)\n",
+           result.error->message,
+           result.error->cursorpos,
+           result.error->funcname,
+           result.error->filename,
+           result.error->lineno);
+  } else {
+    printf("%s\n", result.parse_tree);
+  }
+
+  pg_query_free_parse_result(result);
+  pg_query_exit();
+
+  return 0;
+}
+```
+
+## Parse options
+
+`pg_query_parse_opts()` accepts a second `parser_options` argument for controlling GUC settings and the parse mode:
+
+```c
+PgQueryParseResult pg_query_parse_opts(const char* input, int parser_options);
+```
+
+The `parser_options` integer is a bitmask. Available flags are defined in `pg_query.h`:
+
+| Flag | Description |
+|------|-------------|
+| `PG_QUERY_PARSE_DEFAULT` | Standard SQL parse mode (default). |
+| `PG_QUERY_DISABLE_BACKSLASH_QUOTE` | Sets `backslash_quote = off`. |
+| `PG_QUERY_DISABLE_STANDARD_CONFORMING_STRINGS` | Sets `standard_conforming_strings = off`. |
+| `PG_QUERY_DISABLE_ESCAPE_STRING_WARNING` | Sets `escape_string_warning = off`. |
+
+## Protobuf alternative
+
+If you need a binary parse tree rather than JSON, use `pg_query_parse_protobuf()`. It returns the same tree in Protocol Buffers format, which is required by the deparsing API. See [Deparsing SQL](/guides/deparsing) for details.
+
+```c
+PgQueryProtobufParseResult pg_query_parse_protobuf(const char* input);
+PgQueryProtobufParseResult pg_query_parse_protobuf_opts(const char* input, int parser_options);
+```
+
+<Note>
+Always call `pg_query_free_parse_result(result)` after you are done with the result. This releases the memory allocated for `parse_tree`, `stderr_buffer`, and `error`.
+</Note>

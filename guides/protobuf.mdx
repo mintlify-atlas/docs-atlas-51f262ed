@@ -1,0 +1,144 @@
+---
+title: "Protobuf parse trees"
+description: "Parse SQL into a binary Protobuf-encoded parse tree, and deparse a Protobuf tree back to SQL text."
+---
+
+`pg_query_parse_protobuf` is an alternative to `pg_query_parse` that returns the parse tree as a binary [Protocol Buffers](https://protobuf.dev/) message instead of a JSON string. The binary format is more compact and faster to process programmatically. It is also the format required by `pg_query_deparse_protobuf`, which converts a parse tree back to SQL text.
+
+## Function signatures
+
+```c
+PgQueryProtobufParseResult pg_query_parse_protobuf(const char* input);
+PgQueryProtobufParseResult pg_query_parse_protobuf_opts(const char* input, int parser_options);
+
+PgQueryDeparseResult pg_query_deparse_protobuf(PgQueryProtobuf parse_tree);
+PgQueryDeparseResult pg_query_deparse_protobuf_opts(
+    PgQueryProtobuf parse_tree,
+    struct PostgresDeparseOpts opts
+);
+```
+
+## Structs
+
+```c
+/* A binary blob holding a serialized Protobuf message */
+typedef struct {
+  size_t len;
+  char*  data;
+} PgQueryProtobuf;
+
+/* Result of pg_query_parse_protobuf */
+typedef struct {
+  PgQueryProtobuf parse_tree;
+  char*           stderr_buffer;
+  PgQueryError*   error;
+} PgQueryProtobufParseResult;
+
+/* Result of pg_query_deparse_protobuf */
+typedef struct {
+  char*         query;
+  PgQueryError* error;
+} PgQueryDeparseResult;
+```
+
+## Decoding the Protobuf
+
+The `PgQueryProtobuf` blob is a serialized `PgQuery.ParseResult` message. The schema for all node types is defined in `protobuf/pg_query.proto`. The generated C bindings are in `protobuf/pg_query.pb-c.h`.
+
+To decode the blob, use the generated `pg_query__parse_result__unpack` function from the protobuf-c runtime:
+
+```c
+#include <pg_query.h>
+#include "protobuf/pg_query.pb-c.h"
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+  const char *input = "SELECT 1";
+
+  PgQueryProtobufParseResult result = pg_query_parse_protobuf(input);
+
+  if (result.error) {
+    printf("error: %s\n", result.error->message);
+    pg_query_free_protobuf_parse_result(result);
+    return 1;
+  }
+
+  PgQuery__ParseResult *parse_result = pg_query__parse_result__unpack(
+    NULL,
+    result.parse_tree.len,
+    (const uint8_t *) result.parse_tree.data
+  );
+
+  printf("version: %d, statements: %zu\n",
+         parse_result->version,
+         parse_result->n_stmts);
+
+  pg_query__parse_result__free_unpacked(parse_result, NULL);
+  pg_query_free_protobuf_parse_result(result);
+  return 0;
+}
+```
+
+## Parse → deparse round-trip
+
+You can convert a Protobuf parse tree back to canonical SQL text with `pg_query_deparse_protobuf`. This is the primary use case for the Protobuf format: parse once, manipulate the tree, then deparse back to SQL.
+
+```c
+#include <pg_query.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+  const char *input = "SELECT 1 + 1";
+
+  /* Step 1: parse to Protobuf */
+  PgQueryProtobufParseResult parse_result = pg_query_parse_protobuf(input);
+  if (parse_result.error) {
+    printf("parse error: %s\n", parse_result.error->message);
+    pg_query_free_protobuf_parse_result(parse_result);
+    return 1;
+  }
+
+  /* Step 2: deparse back to SQL */
+  PgQueryDeparseResult deparse_result =
+      pg_query_deparse_protobuf(parse_result.parse_tree);
+
+  if (deparse_result.error) {
+    printf("deparse error: %s\n", deparse_result.error->message);
+  } else {
+    printf("%s\n", deparse_result.query);  /* outputs: SELECT (1 + 1) */
+  }
+
+  pg_query_free_deparse_result(deparse_result);
+  pg_query_free_protobuf_parse_result(parse_result);
+  return 0;
+}
+```
+
+## Parse mode and options
+
+`pg_query_parse_protobuf_opts` accepts the same `parser_options` integer as `pg_query_parse_opts`. See [Parse options](/guides/parse-options) for details on parse modes and GUC flags.
+
+`pg_query_deparse_protobuf_opts` accepts a `PostgresDeparseOpts` struct that controls pretty-printing:
+
+```c
+typedef struct PostgresDeparseOpts {
+  PostgresDeparseComment **comments;
+  size_t comment_count;
+
+  bool pretty_print;
+  int  indent_size;          /* default: 4 spaces */
+  int  max_line_length;      /* default: 80 characters */
+  bool trailing_newline;     /* default: off */
+  bool commas_start_of_line; /* default: off */
+} PostgresDeparseOpts;
+```
+
+## The proto schema
+
+All parse node types are defined in `protobuf/pg_query.proto` in the repository. Use this file to generate bindings for your language if you are consuming the Protobuf outside of C.
+
+<Note>
+Always call `pg_query_free_protobuf_parse_result()` after you are done with the parse result, and `pg_query_free_deparse_result()` after you are done with the deparse result.
+</Note>

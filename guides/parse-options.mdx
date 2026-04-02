@@ -1,0 +1,120 @@
+---
+title: "Parse options"
+description: "Control parse mode and string-literal GUCs when calling pg_query_parse_opts or pg_query_fingerprint_opts."
+---
+
+The standard `pg_query_parse` and `pg_query_fingerprint` functions parse SQL in the default PostgreSQL mode. When you need to parse a type name, a PL/pgSQL expression, or SQL written under non-default string-literal rules, use the `_opts` variants and pass a `parser_options` integer that encodes a parse mode and optional GUC flags.
+
+## Function signatures
+
+```c
+PgQueryParseResult       pg_query_parse_opts(const char* input, int parser_options);
+PgQueryFingerprintResult pg_query_fingerprint_opts(const char* input, int parser_options);
+```
+
+## Parse mode
+
+The lower 4 bits of `parser_options` select the parse mode. Use one of the `PgQueryParseMode` enum values:
+
+```c
+typedef enum
+{
+  PG_QUERY_PARSE_DEFAULT = 0,         /* normal SQL statement parsing */
+  PG_QUERY_PARSE_TYPE_NAME,           /* parse a type name only */
+  PG_QUERY_PARSE_PLPGSQL_EXPR,        /* parse a PL/pgSQL expression */
+  PG_QUERY_PARSE_PLPGSQL_ASSIGN1,     /* parse a PL/pgSQL assignment (target = expr) */
+  PG_QUERY_PARSE_PLPGSQL_ASSIGN2,     /* parse a PL/pgSQL assignment (target := expr) */
+  PG_QUERY_PARSE_PLPGSQL_ASSIGN3      /* parse a PL/pgSQL assignment (target [i] = expr) */
+} PgQueryParseMode;
+```
+
+| Mode | Use case |
+|---|---|
+| `PG_QUERY_PARSE_DEFAULT` | Standard SQL statements — the same as calling `pg_query_parse` |
+| `PG_QUERY_PARSE_TYPE_NAME` | Parse a bare type name such as `integer` or `character varying(100)` |
+| `PG_QUERY_PARSE_PLPGSQL_EXPR` | Parse a PL/pgSQL expression in isolation |
+| `PG_QUERY_PARSE_PLPGSQL_ASSIGN1/2/3` | Parse the right-hand side of a PL/pgSQL assignment statement |
+
+## GUC flags
+
+The upper bits of `parser_options` control string-literal behavior. Combine flags with bitwise OR:
+
+```c
+#define PG_QUERY_DISABLE_BACKSLASH_QUOTE             16  /* backslash_quote = off */
+#define PG_QUERY_DISABLE_STANDARD_CONFORMING_STRINGS 32  /* standard_conforming_strings = off */
+#define PG_QUERY_DISABLE_ESCAPE_STRING_WARNING        64  /* escape_string_warning = off */
+```
+
+| Flag | Default PostgreSQL behavior | Effect when set |
+|---|---|---|
+| `PG_QUERY_DISABLE_BACKSLASH_QUOTE` | `backslash_quote = safe_encoding` (effectively on) | Disables backslash quoting inside string literals |
+| `PG_QUERY_DISABLE_STANDARD_CONFORMING_STRINGS` | `standard_conforming_strings = on` | Treats `\n`, `\'`, etc. as escape sequences (pre-SQL-standard behavior) |
+| `PG_QUERY_DISABLE_ESCAPE_STRING_WARNING` | `escape_string_warning = on` | Suppresses warnings about non-standard escape sequences |
+
+## Combining mode and flags
+
+Pass `parser_options` as a single `int`. Use bitwise OR to combine a parse mode with any GUC flags:
+
+```c
+/* Parse a type name with standard_conforming_strings disabled */
+int opts = PG_QUERY_PARSE_TYPE_NAME
+         | PG_QUERY_DISABLE_STANDARD_CONFORMING_STRINGS;
+
+PgQueryParseResult result = pg_query_parse_opts("integer", opts);
+```
+
+Because the parse mode occupies only the lower 4 bits and the GUC flags start at bit 4 (value 16), they never overlap.
+
+## Example: parsing a type name
+
+```c
+#include <pg_query.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+  PgQueryParseResult result = pg_query_parse_opts(
+    "character varying(100)",
+    PG_QUERY_PARSE_TYPE_NAME
+  );
+
+  if (result.error) {
+    printf("error: %s\n", result.error->message);
+  } else {
+    printf("%s\n", result.parse_tree);
+  }
+
+  pg_query_free_parse_result(result);
+  pg_query_exit();
+  return 0;
+}
+```
+
+## Example: parsing a PL/pgSQL expression
+
+```c
+#include <pg_query.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+  PgQueryParseResult result = pg_query_parse_opts(
+    "v_name || '/' || v_version",
+    PG_QUERY_PARSE_PLPGSQL_EXPR
+  );
+
+  if (result.error) {
+    printf("error: %s\n", result.error->message);
+  } else {
+    printf("%s\n", result.parse_tree);
+  }
+
+  pg_query_free_parse_result(result);
+  pg_query_exit();
+  return 0;
+}
+```
+
+<Note>
+Always call `pg_query_free_parse_result()` when you are done with the result. Call `pg_query_exit()` at program exit to release the top-level memory context.
+</Note>

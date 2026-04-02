@@ -1,0 +1,147 @@
+---
+title: 'Scanning tokens'
+description: 'Use pg_query_scan() to run the PostgreSQL lexer and get a list of tokens from a SQL string.'
+---
+
+`pg_query_scan()` runs the PostgreSQL scanner (lexer) — the first stage of parsing — and returns the list of tokens it produces. This is useful when you need low-level token information without a full parse tree, for example when implementing syntax highlighting.
+
+Unlike the full parser, the scanner never fails on syntactically invalid SQL. It produces tokens for whatever input it receives.
+
+<Note>
+Whitespace is not emitted as tokens. The scanner skips over it silently.
+</Note>
+
+## Function signature
+
+```c
+PgQueryScanResult pg_query_scan(const char* input);
+```
+
+### Result struct
+
+```c
+typedef struct {
+  PgQueryProtobuf pbuf;    // Serialized ScanResult protobuf
+  char* stderr_buffer;     // Any stderr output captured during scanning
+  PgQueryError* error;     // NULL on success, populated on scanner error
+} PgQueryScanResult;
+```
+
+The result is encoded as a Protocol Buffers message. You unpack it using the generated `pg_query__scan_result__unpack()` function from `protobuf/pg_query.pb-c.h`.
+
+## Token fields
+
+After unpacking, each `PgQuery__ScanToken` in the `tokens` array has four fields:
+
+| Field          | Type          | Description |
+|----------------|---------------|-------------|
+| `start`        | `int32`       | Byte offset of the first character of the token in the input string. |
+| `end`          | `int32`       | Byte offset one past the last character of the token. |
+| `token`        | `PgQuery__Token` | The token type. See `Token` in `protobuf/pg_query.proto` for the full list. |
+| `keyword_kind` | `PgQuery__KeywordKind` | Indicates whether the token is a keyword, and what kind. |
+
+### Keyword kinds
+
+| Value | Description |
+|-------|-------------|
+| `NO_KEYWORD` | The token is not a keyword (e.g. an identifier, literal, or operator). |
+| `UNRESERVED_KEYWORD` | Unreserved keyword — can be used as any kind of unescaped name. |
+| `COL_NAME_KEYWORD` | Unreserved keyword — can be an unescaped column, table, or similar name, but not a function or type name. |
+| `TYPE_FUNC_NAME_KEYWORD` | Reserved keyword — can be an unescaped function or type name, but not a column, table, or variable name. |
+| `RESERVED_KEYWORD` | Fully reserved keyword — cannot be used as any kind of unescaped name. |
+
+## Example
+
+```c
+#include <pg_query.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "protobuf/pg_query.pb-c.h"
+
+size_t testCount = 13;
+const char* tests[] = {
+  "SELECT 1",
+  "SELECT \\s 1",
+  "SELECT * FROM x WHERE z = 2",
+  "SELECT 5.41414",
+  "SELECT $1",
+  "SELECT ?",
+  "SELECT update AS left /* comment */ FROM between",
+  "--test\nSELECT 1",
+  /* ... */
+};
+
+int main() {
+  PgQueryScanResult result;
+  PgQuery__ScanResult *scan_result;
+  PgQuery__ScanToken *scan_token;
+  const ProtobufCEnumValue *token_kind;
+  const ProtobufCEnumValue *keyword_kind;
+  size_t i;
+  size_t j;
+
+  for (i = 0; i < testCount; i++) {
+    result = pg_query_scan(tests[i]);
+
+    printf("%s\n", tests[i]);
+    if (result.error) {
+      printf("  error: %s at %d\n", result.error->message, result.error->cursorpos);
+    } else {
+      scan_result = pg_query__scan_result__unpack(NULL, result.pbuf.len, (void *) result.pbuf.data);
+
+      printf("  version: %d, tokens: %zu, size: %zu\n",
+             scan_result->version, scan_result->n_tokens, result.pbuf.len);
+
+      for (j = 0; j < scan_result->n_tokens; j++) {
+        scan_token = scan_result->tokens[j];
+        token_kind = protobuf_c_enum_descriptor_get_value(
+            &pg_query__token__descriptor, scan_token->token);
+        keyword_kind = protobuf_c_enum_descriptor_get_value(
+            &pg_query__keyword_kind__descriptor, scan_token->keyword_kind);
+        printf("  \"%.*s\" = [ %d, %d, %s, %s ]\n",
+               scan_token->end - scan_token->start,
+               &(tests[i][scan_token->start]),
+               scan_token->start, scan_token->end,
+               token_kind->name, keyword_kind->name);
+      }
+
+      pg_query__scan_result__free_unpacked(scan_result, NULL);
+    }
+
+    pg_query_free_scan_result(result);
+  }
+
+  // Optional: frees the top-level memory context
+  pg_query_exit();
+
+  return 0;
+}
+```
+
+## Sample output
+
+For the input `SELECT update AS left /* comment */ FROM between`:
+
+```
+version: 170007, tokens: 7, size: 77
+"SELECT"        = [ 0,  6,  SELECT,    RESERVED_KEYWORD ]
+"update"        = [ 7,  13, UPDATE,    UNRESERVED_KEYWORD ]
+"AS"            = [ 14, 16, AS,        RESERVED_KEYWORD ]
+"left"          = [ 17, 21, LEFT,      TYPE_FUNC_NAME_KEYWORD ]
+"/* comment */" = [ 22, 35, C_COMMENT, NO_KEYWORD ]
+"FROM"          = [ 36, 40, FROM,      RESERVED_KEYWORD ]
+"between"       = [ 41, 48, BETWEEN,   COL_NAME_KEYWORD ]
+```
+
+Each element in the output is `[ start, end, token_type, keyword_kind ]`.
+
+Notice that `update`, `left`, and `between` are all valid identifiers in certain contexts even though they look like keywords — their `keyword_kind` reflects exactly how PostgreSQL classifies them.
+
+## Token types
+
+The full list of token types is defined in the `Token` enum in `protobuf/pg_query.proto` in the libpg_query repository. Common examples include `SELECT`, `UPDATE`, `IDENT`, `ICONST` (integer constant), `SCONST` (string constant), `C_COMMENT`, `SQL_COMMENT`, and operator tokens.
+
+<Note>
+Always call `pg_query_free_scan_result(result)` after you are done with the result. This releases the memory allocated for `pbuf`, `stderr_buffer`, and `error`.
+</Note>

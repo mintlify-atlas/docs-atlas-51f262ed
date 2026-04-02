@@ -1,0 +1,102 @@
+---
+title: "Splitting statements"
+description: "Split a SQL string containing multiple statements into individual statement locations using the scanner or parser."
+---
+
+libpg_query provides two functions for splitting a SQL string that contains multiple statements into its individual parts: `pg_query_split_with_scanner` and `pg_query_split_with_parser`. Both functions return byte offsets into the original input string rather than copying substrings, so you can slice the original string yourself.
+
+## Function signatures
+
+```c
+PgQuerySplitResult pg_query_split_with_scanner(const char *input);
+PgQuerySplitResult pg_query_split_with_parser(const char *input);
+```
+
+### Result structs
+
+```c
+typedef struct {
+  int stmt_location;  /* byte offset of the statement start in the input */
+  int stmt_len;       /* byte length of the statement */
+} PgQuerySplitStmt;
+
+typedef struct {
+  PgQuerySplitStmt **stmts;   /* array of statement location/length pairs */
+  int n_stmts;                /* number of statements found */
+  char* stderr_buffer;
+  PgQueryError* error;
+} PgQuerySplitResult;
+```
+
+`stmt_location` and `stmt_len` are byte offsets into the original input string. To extract statement `i` as a C string, use `strndup(input + result.stmts[i]->stmt_location, result.stmts[i]->stmt_len)`.
+
+## Choosing a function
+
+<CardGroup cols={2}>
+  <Card title="pg_query_split_with_scanner" icon="shield">
+    Uses only the lexer (scanner), so it succeeds even when the input contains syntax errors. Use this when you need best-effort splitting of potentially invalid SQL.
+  </Card>
+  <Card title="pg_query_split_with_parser" icon="check">
+    Runs the full parser for improved accuracy. Recommended when the input is expected to be valid SQL and you want the most correct statement boundaries.
+  </Card>
+</CardGroup>
+
+<Note>
+Both functions handle special cases: semicolons inside string literals, line and block comments containing `;`, and `CREATE RULE` statements with multiple sub-statements inside parentheses (treated as a single statement).
+</Note>
+
+## Example
+
+The following program splits two statements and prints the location and length of each:
+
+```c
+#include <pg_query.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+  const char *input = "SELECT 1; SELECT 2";
+  PgQuerySplitResult result = pg_query_split_with_parser(input);
+
+  if (result.error) {
+    printf("error: %s\n", result.error->message);
+    pg_query_free_split_result(result);
+    return 1;
+  }
+
+  for (int i = 0; i < result.n_stmts; i++) {
+    printf("statement %d: loc=%d, len=%d\n",
+           i,
+           result.stmts[i]->stmt_location,
+           result.stmts[i]->stmt_len);
+  }
+
+  pg_query_free_split_result(result);
+  return 0;
+}
+```
+
+Output:
+
+```
+statement 0: loc=0, len=8
+statement 1: loc=9, len=9
+```
+
+## Special cases
+
+The following table shows how both functions handle edge cases:
+
+| Input | Statements found | Notes |
+|---|---|---|
+| `SELECT 1` | `loc=0,len=8` | Single statement, no trailing semicolon |
+| `SELECT 1; SELECT 2` | `loc=0,len=8` and `loc=9,len=9` | Two statements |
+| `SELECT /* comment with ; */ 1; SELECT 2` | `loc=0,len=29` and `loc=30,len=9` | Semicolon inside block comment is ignored |
+| `SELECT --othercomment with ;\n 1; SELECT 2` | `loc=0,len=31` and `loc=32,len=9` | Semicolon inside line comment is ignored |
+| `CREATE RULE x AS ON SELECT TO tbl DO (SELECT 1; SELECT 2)` | `loc=0,len=57` | Entire `CREATE RULE` with parenthesized body is one statement |
+
+Empty inputs and bare semicolons with no preceding keyword produce zero statements.
+
+<Warning>
+Always call `pg_query_free_split_result()` after you are done with the result, even when an error occurred. Failing to do so causes a memory leak.
+</Warning>

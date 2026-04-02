@@ -1,0 +1,82 @@
+---
+title: 'Fingerprinting queries'
+description: 'Use pg_query_fingerprint() to produce a stable hash that identifies structurally equivalent SQL queries.'
+---
+
+`pg_query_fingerprint()` parses a SQL query and produces a 64-bit hash (returned as both a `uint64_t` and a hex string) that identifies the query's structure. Two queries that differ only in literal values, whitespace, or formatting will produce the same fingerprint.
+
+This makes fingerprinting useful for grouping together queries that represent the same logical operation — for example, tracking the frequency of a query pattern in a workload, or detecting when the same query is being issued with different bind parameters.
+
+```
+"SELECT 1"  →  50fde20626009aba
+"SELECT 2"  →  50fde20626009aba
+"SELECT $1" →  50fde20626009aba
+```
+
+## Function signatures
+
+```c
+PgQueryFingerprintResult pg_query_fingerprint(const char* input);
+PgQueryFingerprintResult pg_query_fingerprint_opts(const char* input, int parser_options);
+```
+
+`pg_query_fingerprint_opts()` accepts the same `parser_options` bitmask as `pg_query_parse_opts()`, which lets you control GUC settings such as `standard_conforming_strings`.
+
+### Result struct
+
+```c
+typedef struct {
+  uint64_t fingerprint;     // The fingerprint as a 64-bit unsigned integer
+  char*    fingerprint_str; // The fingerprint as a lowercase hex string
+  char*    stderr_buffer;   // Any stderr output captured during parsing
+  PgQueryError* error;      // NULL on success, populated on error
+} PgQueryFingerprintResult;
+```
+
+## Example
+
+```c
+#include <pg_query.h>
+#include <stdio.h>
+
+int main() {
+  PgQueryFingerprintResult result;
+
+  result = pg_query_fingerprint("SELECT 1");
+
+  if (result.error) {
+    printf("error: %s at %d\n", result.error->message, result.error->cursorpos);
+  } else {
+    printf("%s\n", result.fingerprint_str);
+  }
+
+  pg_query_free_fingerprint_result(result);
+
+  return 0;
+}
+```
+
+Output:
+
+```
+50fde20626009aba
+```
+
+## Fingerprint stability
+
+Fingerprints are stable across invocations for the same libpg_query version. They are not guaranteed to be stable across major version upgrades of libpg_query because the underlying PostgreSQL parse tree representation can change.
+
+Some examples of queries that produce the same fingerprint:
+
+| Queries | Fingerprint |
+|---------|-------------|
+| `SELECT * FROM x WHERE y = $1` | `4ff39426bd074231` |
+| `SELECT * FROM x WHERE y = ANY ($1)` | `4ff39426bd074231` |
+| `SELECT * FROM x WHERE y IN ($1)` | `4ff39426bd074231` |
+| `SELECT * FROM x WHERE y IN ($1, $2, $3)` | `4ff39426bd074231` |
+
+For the complete specification of what is and is not considered structurally equivalent, see the [fingerprinting rules](https://github.com/pganalyze/libpg_query/wiki/Fingerprinting).
+
+<Note>
+Always call `pg_query_free_fingerprint_result(result)` after you are done with the result. This releases the memory allocated for `fingerprint_str`, `stderr_buffer`, and `error`.
+</Note>
